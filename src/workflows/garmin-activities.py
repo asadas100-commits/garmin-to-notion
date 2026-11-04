@@ -207,27 +207,70 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
     icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
 
     properties = {
+            duration_seconds = int(activity.get('duration') or 0)
+    minutes, seconds = divmod(duration_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    time_text = f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+    def number_value(key, digits=0, divisor=1):
+        value = activity.get(key)
+        if value is None:
+            return None
+        return round(float(value) / divisor, digits)
+
+    def text_value(value):
+        if not value:
+            return {"rich_text": []}
+        return {"rich_text": [{"text": {"content": str(value)}}]}
+
+    activity_date = datetime.strptime(
+        activity.get('startTimeGMT'), '%Y-%m-%d %H:%M:%S'
+    ).replace(tzinfo=UTC).isoformat()
+
+    properties = {
+            duration_seconds = int(activity.get('duration') or 0)
+    minutes, seconds = divmod(duration_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    time_text = f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+    def number_value(key, digits=0, divisor=1):
+        value = activity.get(key)
+        if value is None:
+            return None
+        return round(float(value) / divisor, digits)
+
+    def text_value(value):
+        if not value:
+            return {"rich_text": []}
+        return {"rich_text": [{"text": {"content": str(value)}}]}
+
+    activity_date = datetime.strptime(
+        activity.get('startTimeGMT'), '%Y-%m-%d %H:%M:%S'
+    ).replace(tzinfo=UTC).isoformat()
+
+    properties = {
         "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
-        "Subactivity Type": {"select": {"name": activity_subtype}},
         "Activity Name": {"title": [{"text": {"content": activity_name}}]},
-        "Distance (km)": {"number": round(activity.get('distance', 0) / 1000, 2)},
-        "Duration (min)": {"number": round(activity.get('duration', 0) / 60, 2)},
-        "Calories": {"number": round(activity.get('calories', 0))},
-        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(activity.get('averageSpeed', 0))}}]},
-        "Avg Power": {"number": round(activity.get('avgPower', 0), 1)},
-        "Max Power": {"number": round(activity.get('maxPower', 0), 1)},
-        "Training Effect": {"select": {"name": format_training_effect(activity.get('trainingEffectLabel', 'Unknown'))}},
-        "Aerobic": {"number": round(activity.get('aerobicTrainingEffect', 0), 1)},
-        "Aerobic Effect": {
-            "select": {"name": format_training_message(activity.get('aerobicTrainingEffectMessage', 'Unknown'))}
+        "タイム": text_value(time_text),
+        "距離": {"number": number_value("distance", 2, 1000)},
+        "標高": {"number": number_value("maxElevation", 1)},
+        "獲得標高": {"number": number_value("elevationGain", 1)},
+        "ケイデンス（平均）": {
+            "number": number_value("averageRunningCadenceInStepsPerMinute", 1)
         },
-        "Anaerobic": {"number": round(activity.get('anaerobicTrainingEffect', 0), 1)},
-        "Anaerobic Effect": {
-            "select": {"name": format_training_message(activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}
-        },
-        "PR": {"checkbox": activity.get('pr', False)},
-        "Fav": {"checkbox": activity.get('favorite', False)}
+        "パワー（平均）": {"number": number_value("avgPower", 1)},
+        "心拍数（最大）": {"number": number_value("maxHR")},
+        "ペース（平均）": text_value(format_pace(activity.get("averageSpeed") or 0)),
+        "平均心拍": {"number": number_value("averageHR")},
+        "消費カロリー": {"number": number_value("calories")},
+        "GAP": text_value(
+            format_pace(activity.get("averageGradeAdjustedSpeed") or 0)
+        ),
+        "Garmin Activity ID": text_value(activity.get("activityId")),
+        "メモ": text_value(activity.get("description")),
+    }
+    }
     }
 
     page = {
