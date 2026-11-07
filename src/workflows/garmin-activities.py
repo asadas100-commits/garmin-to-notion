@@ -230,33 +230,47 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
         timedelta(seconds=int(activity.get("duration") or 0))
     )
 
+        def text_property(value):
+        value = str(value or "")
+        return {"rich_text": [{"text": {"content": value}}]} if value else {"rich_text": []}
+
     properties = {
-        "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
-        "Activity Name": {
-            "title": [{"text": {"content": activity_name}}]
+        "タイム": {
+            "rich_text": [{
+                "text": {
+                    "content": str(
+                        timedelta(seconds=int(new_activity.get("duration") or 0))
+                    )
+                }
+            }]
         },
-        "タイム": text_value(duration_text),
-        "距離": {"number": number_value("distance", 2, 1000)},
-        "標高": {"number": number_value("maxElevation", 1)},
-        "獲得標高": {"number": number_value("elevationGain", 1)},
+        "距離": {
+            "number": round((new_activity.get("distance") or 0) / 1000, 2)
+        },
+        "標高": {"number": round(new_activity.get("maxElevation") or 0, 1)},
+        "獲得標高": {
+            "number": round(new_activity.get("elevationGain") or 0, 1)
+        },
         "ケイデンス（平均）": {
-            "number": number_value(
-                "averageRunningCadenceInStepsPerMinute", 1
+            "number": round(
+                new_activity.get("averageRunningCadenceInStepsPerMinute") or 0, 1
             )
         },
-        "パワー（平均）": {"number": number_value("avgPower", 1)},
-        "心拍数（最大）": {"number": number_value("maxHR")},
-        "ペース（平均）": text_value(
-            format_pace(activity.get("averageSpeed") or 0)
+        "パワー（平均）": {
+            "number": round(new_activity.get("avgPower") or 0, 1)
+        },
+        "心拍数（最大）": {"number": round(new_activity.get("maxHR") or 0)},
+        "ペース（平均）": text_property(
+            format_pace(new_activity.get("averageSpeed") or 0)
         ),
-        "平均心拍": {"number": number_value("averageHR")},
-        "消費カロリー": {"number": number_value("calories")},
-        "GAP": text_value(
-            format_pace(activity.get("averageGradeAdjustedSpeed") or 0)
+        "平均心拍": {"number": round(new_activity.get("averageHR") or 0)},
+        "消費カロリー": {"number": round(new_activity.get("calories") or 0)},
+        "GAP": text_property(
+            format_pace(new_activity.get("averageGradeAdjustedSpeed") or 0)
         ),
-        "Garmin Activity ID": text_value(activity.get("activityId")),
-        "メモ": text_value(activity.get("description")),
+        "Garmin Activity ID": text_property(new_activity.get("activityId")),
+        "メモ": text_property(new_activity.get("description")),
     }
 
     page = {
