@@ -151,47 +151,17 @@ def activity_exists(
 
 
 def activity_needs_update(existing_activity: dict, new_activity: dict) -> bool:
-    existing_props = existing_activity['properties']
+    properties = existing_activity.get("properties", {})
+    id_property = properties.get("Garmin Activity ID", {})
+    rich_text = id_property.get("rich_text", [])
 
-    activity_name = new_activity.get('activityName', '').lower()
-    activity_type, activity_subtype = format_activity_type(
-        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
+    existing_id = "".join(
+        item.get("plain_text", "") for item in rich_text
     )
+    new_id = str(new_activity.get("activityId") or "")
 
-    # Check if 'Subactivity Type' property exists
-    has_subactivity = (
-        'Subactivity Type' in existing_props and
-        existing_props['Subactivity Type'] is not None and
-        existing_props['Subactivity Type'].get('select') is not None
-    )
-
-    return (
-        existing_props['Distance (km)']['number'] != round(new_activity.get('distance', 0) / 1000, 2) or
-        existing_props['Duration (min)']['number'] != round(new_activity.get('duration', 0) / 60, 2) or
-        existing_props['Calories']['number'] != round(new_activity.get('calories', 0)) or
-        existing_props['Avg Pace']['rich_text'][0]['text']['content'] != format_pace(
-        new_activity.get('averageSpeed', 0)
-    ) or
-        existing_props['Avg Power']['number'] != round(new_activity.get('avgPower', 0), 1) or
-        existing_props['Max Power']['number'] != round(new_activity.get('maxPower', 0), 1) or
-        existing_props['Training Effect']['select']['name'] != format_training_effect(
-        new_activity.get('trainingEffectLabel', 'Unknown')
-    ) or
-        existing_props['Aerobic']['number'] != round(new_activity.get('aerobicTrainingEffect', 0), 1) or
-        existing_props['Aerobic Effect']['select']['name'] != format_training_message(
-        new_activity.get('aerobicTrainingEffectMessage', 'Unknown')
-    ) or
-        existing_props['Anaerobic']['number'] != round(new_activity.get('anaerobicTrainingEffect', 0), 1) or
-        existing_props['Anaerobic Effect']['select']['name'] != format_training_message(
-        new_activity.get('anaerobicTrainingEffectMessage', 'Unknown')
-    ) or
-        existing_props['PR']['checkbox'] != new_activity.get('pr', False) or
-        existing_props['Fav']['checkbox'] != new_activity.get('favorite', False) or
-        existing_props['Activity Type']['select']['name'] != activity_type or
-        (has_subactivity and existing_props['Subactivity Type']['select']['name'] != activity_subtype) or
-        (not has_subactivity)  # If the property doesn't exist, we need an update
-    )
+    # Garmin Activity IDが未登録の既存ページだけ、一度更新します。
+    return bool(new_id) and existing_id != new_id
 
 
 def create_activity(notion_client: NotionClient, database_id: str, activity: dict) -> None:
