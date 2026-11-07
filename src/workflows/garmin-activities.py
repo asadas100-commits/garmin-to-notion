@@ -195,43 +195,24 @@ def activity_needs_update(existing_activity: dict, new_activity: dict) -> bool:
 
 
 def create_activity(notion_client: NotionClient, database_id: str, activity: dict) -> None:
-    # Create a new activity in the Notion database
-    activity_date = activity.get('startTimeGMT')
-    activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
-    activity_type, activity_subtype = format_activity_type(
-        activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
+    activity_date_raw = activity.get("startTimeGMT")
+    activity_date = (
+        datetime.strptime(activity_date_raw, "%Y-%m-%d %H:%M:%S")
+        .replace(tzinfo=UTC)
+        .isoformat()
     )
 
-    # Get icon for the activity type
-    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
+    activity_name = format_entertainment(
+        activity.get("activityName", "Unnamed Activity")
+    )
+    activity_type, activity_subtype = format_activity_type(
+        activity.get("activityType", {}).get("typeKey", "Unknown"),
+        activity_name,
+    )
 
-    properties = {
-            duration_seconds = int(activity.get('duration') or 0)
-    minutes, seconds = divmod(duration_seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    time_text = f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
-
-    def number_value(key, digits=0, divisor=1):
-        value = activity.get(key)
-        if value is None:
-            return None
-        return round(float(value) / divisor, digits)
-
-    def text_value(value):
-        if not value:
-            return {"rich_text": []}
-        return {"rich_text": [{"text": {"content": str(value)}}]}
-
-    activity_date = datetime.strptime(
-        activity.get('startTimeGMT'), '%Y-%m-%d %H:%M:%S'
-    ).replace(tzinfo=UTC).isoformat()
-
-    properties = {
-            duration_seconds = int(activity.get('duration') or 0)
-    minutes, seconds = divmod(duration_seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    time_text = f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+    icon_url = ACTIVITY_ICONS.get(
+        activity_subtype if activity_subtype != activity_type else activity_type
+    )
 
     def number_value(key, digits=0, divisor=1):
         value = activity.get(key)
@@ -240,28 +221,35 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
         return round(float(value) / divisor, digits)
 
     def text_value(value):
+        value = str(value or "")
         if not value:
             return {"rich_text": []}
-        return {"rich_text": [{"text": {"content": str(value)}}]}
+        return {"rich_text": [{"text": {"content": value}}]}
 
-    activity_date = datetime.strptime(
-        activity.get('startTimeGMT'), '%Y-%m-%d %H:%M:%S'
-    ).replace(tzinfo=UTC).isoformat()
+    duration_text = str(
+        timedelta(seconds=int(activity.get("duration") or 0))
+    )
 
     properties = {
         "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
-        "Activity Name": {"title": [{"text": {"content": activity_name}}]},
-        "タイム": text_value(time_text),
+        "Activity Name": {
+            "title": [{"text": {"content": activity_name}}]
+        },
+        "タイム": text_value(duration_text),
         "距離": {"number": number_value("distance", 2, 1000)},
         "標高": {"number": number_value("maxElevation", 1)},
         "獲得標高": {"number": number_value("elevationGain", 1)},
         "ケイデンス（平均）": {
-            "number": number_value("averageRunningCadenceInStepsPerMinute", 1)
+            "number": number_value(
+                "averageRunningCadenceInStepsPerMinute", 1
+            )
         },
         "パワー（平均）": {"number": number_value("avgPower", 1)},
         "心拍数（最大）": {"number": number_value("maxHR")},
-        "ペース（平均）": text_value(format_pace(activity.get("averageSpeed") or 0)),
+        "ペース（平均）": text_value(
+            format_pace(activity.get("averageSpeed") or 0)
+        ),
         "平均心拍": {"number": number_value("averageHR")},
         "消費カロリー": {"number": number_value("calories")},
         "GAP": text_value(
@@ -269,8 +257,6 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
         ),
         "Garmin Activity ID": text_value(activity.get("activityId")),
         "メモ": text_value(activity.get("description")),
-    }
-    }
     }
 
     page = {
@@ -282,8 +268,6 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
 
     notion_client.pages.create(**page)
-
-
 def update_activity(notion_client: NotionClient, existing_activity: dict, new_activity: dict) -> None:
     # Update an existing activity in the Notion database with new data
     activity_name = new_activity.get('activityName', 'Unnamed Activity')
