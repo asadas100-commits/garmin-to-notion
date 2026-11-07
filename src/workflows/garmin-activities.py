@@ -325,6 +325,9 @@ def main():
             activity_name
         )
 
+        if activity_type not in {"Running", "Trail Running", "Cycling", "Hiking"}:
+            continue
+
         # Check if activity already exists in Notion
         existing_activity = activity_exists(notion_client, database_id, activity_date, activity_type, activity_name)
 
