@@ -164,7 +164,7 @@ def activity_needs_update(existing_activity: dict, new_activity: dict) -> bool:
     return bool(new_id) and existing_id != new_id
 
 
-def create_activity(notion_client: NotionClient, database_id: str, activity: dict) -> None:
+def create_activity(notion_client: NotionClient, database_id: str, activity: dict) -> str:
     activity_date = (
         datetime.strptime(activity.get("startTimeGMT"), "%Y-%m-%d %H:%M:%S")
         .replace(tzinfo=UTC)
@@ -222,7 +222,7 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
     if icon_url:
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
 
-    notion_client.pages.create(**page)
+    return notion_client.pages.create(**page)["id"]
 def update_activity(notion_client: NotionClient, existing_activity: dict, new_activity: dict) -> None:
     activity_name = format_entertainment(
         new_activity.get("activityName", "Unnamed Activity")
@@ -280,48 +280,185 @@ def update_activity(notion_client: NotionClient, existing_activity: dict, new_ac
     if icon_url:
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
 
-    notion_client.pages.update(**update)
+    notion_client.pages.update(**update)def sync_activity_laps(
+    garmin_client: GarminClient,
+    notion_client: NotionClient,
+    activity_database_id: str,
+    activity_page_id: str,
+    activity: dict,
+) -> None:
+    activity_id = activity.get("activityId")
+    if not activity_id:
+        return
+
+    activity_db = notion_client.databases.retrieve(
+        database_id=activity_database_id
+    )
+    lap_relation = next(
+        (
+            prop for name, prop in activity_db["properties"].items()
+            if prop.get("type") == "relation" and "1km" in name
+        ),
+        None,
+    )
+    if not lap_relation:
+        raise ValueError("アクティビティDBのラップDBリレーションが見つかりません")
+
+    lap_database_id = lap_relation["relation"]["database_id"]
+    lap_response = garmin_client.get_activity_laps(activity_id)
+    laps = lap_response.get("lapDTOs", [])
+
+    for index, lap in enumerate(laps, start=1):
+        lap_number = lap.get("lapIndex") or index
+        garmin_activity_id = str(activity_id)
+
+        existing = notion_client.databases.query(
+            database_id=lap_database_id,
+            filter={
+                "and": [
+                    {
+                        "property": "Garmin Activity ID",
+                        "rich_text": {"equals": garmin_activity_id},
+                    },
+                    {
+                        "property": "ラップ番号",
+                        "number": {"equals": lap_number},
+                    },
+                ]
+            },
+        )["results"]
+
+        def lap_number_value(*keys):
+            for key in keys:
+                value = lap.get(key)
+                if value is not None:
+                    return round(float(value), 1)
+            return None
+
+        duration = str(timedelta(seconds=int(lap.get("duration") or 0)))
+        speed = lap.get("averageSpeed") or 0
+        cadence = lap_number_value(
+            "averageRunCadence",
+            "averageBikeCadence",
+            "averageRunningCadenceInStepsPerMinute",
+        )
+
+        properties = {
+            "ラップ名": {
+                "title": [{"text": {"content": f"{lap_number} km"}}]
+            },
+            "Garmin Activity ID": {
+                "rich_text": [{"text": {"content": garmin_activity_id}}]
+            },
+            "アクティビティ": {
+                "relation": [{"id": activity_page_id}]
+            },
+            "アクティビティ名": {
+                "relation": [{"id": activity_page_id}]
+            },
+            "ラップ番号": {"number": lap_number},
+            "ラップ距離": {
+                "number": round(float(lap.get("distance") or 0) / 1000, 2)
+            },
+            "ラップタイム": {
+                "rich_text": [{"text": {"content": duration}}]
+            },
+            "ラップペース": {
+                "rich_text": [{
+                    "text": {"content": format_pace(speed)}
+                }]
+            },
+            "ラップ平均ケイデンス": {"number": cadence},
+            "ラップ平均パワー": {
+                "number": lap_number_value("averagePower")
+            },
+            "ラップ平均心拍": {
+                "number": lap_number_value("averageHR")
+            },
+            "ラップ標高差": {
+                "number": lap_number_value("elevationGain")
+            },
+            "日付": {
+                "date": {
+                    "start": (
+                        datetime.strptime(
+                            lap.get("startTimeGMT") or activity["startTimeGMT"],
+                            "%Y-%m-%d %H:%M:%S",
+                        )
+                        .replace(tzinfo=UTC)
+                        .isoformat()
+                    )
+                }
+            },
+        }
+
+        if existing:
+            notion_client.pages.update(
+                page_id=existing[0]["id"],
+                properties=properties,
+            )
+        else:
+            notion_client.pages.create(
+                parent={"database_id": lap_database_id},
+                properties=properties,
+            )
 def main():
     load_dotenv()
 
-    # Initialize Garmin and Notion clients using environment variables
     garmin_client, garmin_configuration = get_garmin_client()
     notion_client, notion_dbs = get_notion_client()
-
     database_id = notion_dbs.activities
 
-    # Get all activities
-    activities = get_all_activities(garmin_client, garmin_configuration.activity_fetch_limit)
+    activities = get_all_activities(
+        garmin_client,
+        garmin_configuration.activity_fetch_limit,
+    )
 
-    # Process all activities
     for activity in activities:
-        activity_date_raw: str = activity.get('startTimeGMT')
-        activity_date: datetime = (
-            datetime
-            .strptime(activity_date_raw, '%Y-%m-%d %H:%M:%S')  # Parse as format received from Garmin
-            .replace(tzinfo=UTC)  # Set timezone to UTC, as Garmin times are in GMT/UTC. Close enough.
+        activity_date_raw = activity.get("startTimeGMT")
+        activity_date = (
+            datetime.strptime(activity_date_raw, "%Y-%m-%d %H:%M:%S")
+            .replace(tzinfo=UTC)
         )
 
-        activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
-        activity_type, activity_subtype = format_activity_type(
-            activity.get('activityType', {}).get('typeKey', 'Unknown'),
-            activity_name
+        activity_name = format_entertainment(
+            activity.get("activityName", "Unnamed Activity")
+        )
+        activity_type, _ = format_activity_type(
+            activity.get("activityType", {}).get("typeKey", "Unknown"),
+            activity_name,
         )
 
         if activity_type not in {"Running", "Trail Running", "Cycling", "Hiking"}:
             continue
 
-        # Check if activity already exists in Notion
-        existing_activity = activity_exists(notion_client, database_id, activity_date, activity_type, activity_name)
+        existing_activity = activity_exists(
+            notion_client,
+            database_id,
+            activity_date,
+            activity_type,
+            activity_name,
+        )
 
         if existing_activity:
             if activity_needs_update(existing_activity, activity):
                 update_activity(notion_client, existing_activity, activity)
-                # print(f"Updated: {activity_type} - {activity_name}")
+            activity_page_id = existing_activity["id"]
         else:
-            create_activity(notion_client, database_id, activity)
-            # print(f"Created: {activity_type} - {activity_name}")
+            activity_page_id = create_activity(
+                notion_client,
+                database_id,
+                activity,
+            )
+
+        sync_activity_laps(
+            garmin_client,
+            notion_client,
+            database_id,
+            activity_page_id,
+            activity,
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
