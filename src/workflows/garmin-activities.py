@@ -224,42 +224,56 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
 
     notion_client.pages.create(**page)
 def update_activity(notion_client: NotionClient, existing_activity: dict, new_activity: dict) -> None:
-    # Update an existing activity in the Notion database with new data
-    activity_name = new_activity.get('activityName', 'Unnamed Activity')
+    activity_name = format_entertainment(
+        new_activity.get("activityName", "Unnamed Activity")
+    )
     activity_type, activity_subtype = format_activity_type(
-        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
+        new_activity.get("activityType", {}).get("typeKey", "Unknown"),
+        activity_name,
+    )
+    icon_url = ACTIVITY_ICONS.get(
+        activity_subtype if activity_subtype != activity_type else activity_type
     )
 
-    # Get icon for the activity type
-    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
+    def number_value(key, digits=0, divisor=1):
+        value = new_activity.get(key)
+        return None if value is None else round(float(value) / divisor, digits)
+
+    def text_value(value):
+        value = str(value or "")
+        return {"rich_text": [{"text": {"content": value}}]} if value else {"rich_text": []}
+
+    duration_text = str(
+        timedelta(seconds=int(new_activity.get("duration") or 0))
+    )
 
     properties = {
         "Activity Type": {"select": {"name": activity_type}},
-        "Subactivity Type": {"select": {"name": activity_subtype}},
-        "Distance (km)": {"number": round(new_activity.get('distance', 0) / 1000, 2)},
-        "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
-        "Calories": {"number": round(new_activity.get('calories', 0))},
-        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(new_activity.get('averageSpeed', 0))}}]},
-        "Avg Power": {"number": round(new_activity.get('avgPower', 0), 1)},
-        "Max Power": {"number": round(new_activity.get('maxPower', 0), 1)},
-        "Training Effect": {
-            "select": {"name": format_training_effect(new_activity.get('trainingEffectLabel', 'Unknown'))}
+        "タイム": text_value(duration_text),
+        "距離": {"number": number_value("distance", 2, 1000)},
+        "標高": {"number": number_value("maxElevation", 1)},
+        "獲得標高": {"number": number_value("elevationGain", 1)},
+        "ケイデンス（平均）": {
+            "number": number_value(
+                "averageRunningCadenceInStepsPerMinute", 1
+            )
         },
-        "Aerobic": {"number": round(new_activity.get('aerobicTrainingEffect', 0), 1)},
-        "Aerobic Effect": {
-            "select": {"name": format_training_message(new_activity.get('aerobicTrainingEffectMessage', 'Unknown'))}
-        },
-        "Anaerobic": {"number": round(new_activity.get('anaerobicTrainingEffect', 0), 1)},
-        "Anaerobic Effect": {
-            "select": {"name": format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}
-        },
-        "PR": {"checkbox": new_activity.get('pr', False)},
-        "Fav": {"checkbox": new_activity.get('favorite', False)}
+        "パワー（平均）": {"number": number_value("avgPower", 1)},
+        "心拍数（最大）": {"number": number_value("maxHR")},
+        "ペース（平均）": text_value(
+            format_pace(new_activity.get("averageSpeed") or 0)
+        ),
+        "平均心拍": {"number": number_value("averageHR")},
+        "消費カロリー": {"number": number_value("calories")},
+        "GAP": text_value(
+            format_pace(new_activity.get("averageGradeAdjustedSpeed") or 0)
+        ),
+        "Garmin Activity ID": text_value(new_activity.get("activityId")),
+        "メモ": text_value(new_activity.get("description")),
     }
 
     update = {
-        "page_id": existing_activity['id'],
+        "page_id": existing_activity["id"],
         "properties": properties,
     }
 
@@ -267,8 +281,6 @@ def update_activity(notion_client: NotionClient, existing_activity: dict, new_ac
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
 
     notion_client.pages.update(**update)
-
-
 def main():
     load_dotenv()
 
