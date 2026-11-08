@@ -298,7 +298,7 @@ def sync_activity_laps(
     lap_relation = next(
         (
             prop for name, prop in activity_db["properties"].items()
-            if prop.get("type") == "relation" and "1km" in name
+            if prop.get("type") == "relation" and "ラップ" in name
         ),
         None,
     )
