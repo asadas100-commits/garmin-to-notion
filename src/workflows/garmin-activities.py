@@ -280,7 +280,8 @@ def update_activity(notion_client: NotionClient, existing_activity: dict, new_ac
     if icon_url:
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
 
-    notion_client.pages.update(**update)def sync_activity_laps(
+    notion_client.pages.update(**update)
+    def sync_activity_laps(
     garmin_client: GarminClient,
     notion_client: NotionClient,
     activity_database_id: str,
