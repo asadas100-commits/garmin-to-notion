@@ -295,7 +295,7 @@ def sync_activity_laps(
     activity_db = notion_client.databases.retrieve(
         database_id=activity_database_id
     )
-    lap_relation = next(
+        print("Notionの列名と種類:", {name: prop.get("type") for name, prop in activity_db["properties"].items()})lap_relation = next(
         (
             prop for name, prop in activity_db["properties"].items()
             if prop.get("type") == "relation" and "ラップ" in name
