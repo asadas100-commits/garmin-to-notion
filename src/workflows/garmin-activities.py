@@ -164,14 +164,12 @@ def activity_needs_update(existing_activity: dict, new_activity: dict) -> bool:
     return bool(new_id) and existing_id != new_id
 
 
-def create_activity(notion_client: NotionClient, database_id: str, activity: dict) -> None:
-    activity_date_raw = activity.get("startTimeGMT")
+def create_activity(notion_client: NotionClient, database_id: str, activity: dict) -> str:
     activity_date = (
-        datetime.strptime(activity_date_raw, "%Y-%m-%d %H:%M:%S")
+        datetime.strptime(activity.get("startTimeGMT"), "%Y-%m-%d %H:%M:%S")
         .replace(tzinfo=UTC)
         .isoformat()
     )
-
     activity_name = format_entertainment(
         activity.get("activityName", "Unnamed Activity")
     )
@@ -179,68 +177,41 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
         activity.get("activityType", {}).get("typeKey", "Unknown"),
         activity_name,
     )
-
     icon_url = ACTIVITY_ICONS.get(
         activity_subtype if activity_subtype != activity_type else activity_type
     )
 
     def number_value(key, digits=0, divisor=1):
         value = activity.get(key)
-        if value is None:
-            return None
-        return round(float(value) / divisor, digits)
+        return None if value is None else round(float(value) / divisor, digits)
 
     def text_value(value):
         value = str(value or "")
-        if not value:
-            return {"rich_text": []}
-        return {"rich_text": [{"text": {"content": value}}]}
-
-    duration_text = str(
-        timedelta(seconds=int(activity.get("duration") or 0))
-    )
-
-        def text_property(value):
-        value = str(value or "")
         return {"rich_text": [{"text": {"content": value}}]} if value else {"rich_text": []}
 
+    duration_text = str(timedelta(seconds=int(activity.get("duration") or 0)))
+
     properties = {
+        "Date": {"date": {"start": activity_date}},
         "Activity Type": {"select": {"name": activity_type}},
-        "タイム": {
-            "rich_text": [{
-                "text": {
-                    "content": str(
-                        timedelta(seconds=int(new_activity.get("duration") or 0))
-                    )
-                }
-            }]
-        },
-        "距離": {
-            "number": round((new_activity.get("distance") or 0) / 1000, 2)
-        },
-        "標高": {"number": round(new_activity.get("maxElevation") or 0, 1)},
-        "獲得標高": {
-            "number": round(new_activity.get("elevationGain") or 0, 1)
-        },
+        "Activity Name": {"title": [{"text": {"content": activity_name}}]},
+        "タイム": text_value(duration_text),
+        "距離": {"number": number_value("distance", 2, 1000)},
+        "標高": {"number": number_value("maxElevation", 1)},
+        "獲得標高": {"number": number_value("elevationGain", 1)},
         "ケイデンス（平均）": {
-            "number": round(
-                new_activity.get("averageRunningCadenceInStepsPerMinute") or 0, 1
-            )
+            "number": number_value("averageRunningCadenceInStepsPerMinute", 1)
         },
-        "パワー（平均）": {
-            "number": round(new_activity.get("avgPower") or 0, 1)
-        },
-        "心拍数（最大）": {"number": round(new_activity.get("maxHR") or 0)},
-        "ペース（平均）": text_property(
-            format_pace(new_activity.get("averageSpeed") or 0)
+        "パワー（平均）": {"number": number_value("avgPower", 1)},
+        "心拍数（最大）": {"number": number_value("maxHR")},
+        "ペース（平均）": text_value(format_pace(activity.get("averageSpeed") or 0)),
+        "平均心拍": {"number": number_value("averageHR")},
+        "消費カロリー": {"number": number_value("calories")},
+        "GAP": text_value(
+            format_pace(activity.get("averageGradeAdjustedSpeed") or 0)
         ),
-        "平均心拍": {"number": round(new_activity.get("averageHR") or 0)},
-        "消費カロリー": {"number": round(new_activity.get("calories") or 0)},
-        "GAP": text_property(
-            format_pace(new_activity.get("averageGradeAdjustedSpeed") or 0)
-        ),
-        "Garmin Activity ID": text_property(new_activity.get("activityId")),
-        "メモ": text_property(new_activity.get("description")),
+        "Garmin Activity ID": text_value(activity.get("activityId")),
+        "メモ": text_value(activity.get("description")),
     }
 
     page = {
@@ -251,44 +222,58 @@ def create_activity(notion_client: NotionClient, database_id: str, activity: dic
     if icon_url:
         page["icon"] = {"type": "external", "external": {"url": icon_url}}
 
-    notion_client.pages.create(**page)
+    return notion_client.pages.create(**page)["id"]
 def update_activity(notion_client: NotionClient, existing_activity: dict, new_activity: dict) -> None:
-    # Update an existing activity in the Notion database with new data
-    activity_name = new_activity.get('activityName', 'Unnamed Activity')
+    activity_name = format_entertainment(
+        new_activity.get("activityName", "Unnamed Activity")
+    )
     activity_type, activity_subtype = format_activity_type(
-        new_activity.get('activityType', {}).get('typeKey', 'Unknown'),
-        activity_name
+        new_activity.get("activityType", {}).get("typeKey", "Unknown"),
+        activity_name,
+    )
+    icon_url = ACTIVITY_ICONS.get(
+        activity_subtype if activity_subtype != activity_type else activity_type
     )
 
-    # Get icon for the activity type
-    icon_url = ACTIVITY_ICONS.get(activity_subtype if activity_subtype != activity_type else activity_type)
+    def number_value(key, digits=0, divisor=1):
+        value = new_activity.get(key)
+        return None if value is None else round(float(value) / divisor, digits)
+
+    def text_value(value):
+        value = str(value or "")
+        return {"rich_text": [{"text": {"content": value}}]} if value else {"rich_text": []}
+
+    duration_text = str(
+        timedelta(seconds=int(new_activity.get("duration") or 0))
+    )
 
     properties = {
         "Activity Type": {"select": {"name": activity_type}},
-        "Subactivity Type": {"select": {"name": activity_subtype}},
-        "Distance (km)": {"number": round(new_activity.get('distance', 0) / 1000, 2)},
-        "Duration (min)": {"number": round(new_activity.get('duration', 0) / 60, 2)},
-        "Calories": {"number": round(new_activity.get('calories', 0))},
-        "Avg Pace": {"rich_text": [{"text": {"content": format_pace(new_activity.get('averageSpeed', 0))}}]},
-        "Avg Power": {"number": round(new_activity.get('avgPower', 0), 1)},
-        "Max Power": {"number": round(new_activity.get('maxPower', 0), 1)},
-        "Training Effect": {
-            "select": {"name": format_training_effect(new_activity.get('trainingEffectLabel', 'Unknown'))}
+        "タイム": text_value(duration_text),
+        "距離": {"number": number_value("distance", 2, 1000)},
+        "標高": {"number": number_value("maxElevation", 1)},
+        "獲得標高": {"number": number_value("elevationGain", 1)},
+        "ケイデンス（平均）": {
+            "number": number_value(
+                "averageRunningCadenceInStepsPerMinute", 1
+            )
         },
-        "Aerobic": {"number": round(new_activity.get('aerobicTrainingEffect', 0), 1)},
-        "Aerobic Effect": {
-            "select": {"name": format_training_message(new_activity.get('aerobicTrainingEffectMessage', 'Unknown'))}
-        },
-        "Anaerobic": {"number": round(new_activity.get('anaerobicTrainingEffect', 0), 1)},
-        "Anaerobic Effect": {
-            "select": {"name": format_training_message(new_activity.get('anaerobicTrainingEffectMessage', 'Unknown'))}
-        },
-        "PR": {"checkbox": new_activity.get('pr', False)},
-        "Fav": {"checkbox": new_activity.get('favorite', False)}
+        "パワー（平均）": {"number": number_value("avgPower", 1)},
+        "心拍数（最大）": {"number": number_value("maxHR")},
+        "ペース（平均）": text_value(
+            format_pace(new_activity.get("averageSpeed") or 0)
+        ),
+        "平均心拍": {"number": number_value("averageHR")},
+        "消費カロリー": {"number": number_value("calories")},
+        "GAP": text_value(
+            format_pace(new_activity.get("averageGradeAdjustedSpeed") or 0)
+        ),
+        "Garmin Activity ID": text_value(new_activity.get("activityId")),
+        "メモ": text_value(new_activity.get("description")),
     }
 
     update = {
-        "page_id": existing_activity['id'],
+        "page_id": existing_activity["id"],
         "properties": properties,
     }
 
@@ -296,49 +281,185 @@ def update_activity(notion_client: NotionClient, existing_activity: dict, new_ac
         update["icon"] = {"type": "external", "external": {"url": icon_url}}
 
     notion_client.pages.update(**update)
+def sync_activity_laps(
+    garmin_client: GarminClient,
+    notion_client: NotionClient,
+    activity_database_id: str,
+    activity_page_id: str,
+    activity: dict,
+) -> None:
+    activity_id = activity.get("activityId")
+    if not activity_id:
+        return
 
+    activity_db = notion_client.databases.retrieve(
+        database_id=activity_database_id
+    )
+    lap_relation = next(
+        (
+            prop for name, prop in activity_db["properties"].items()
+            if prop.get("type") == "relation" and "1km" in name
+        ),
+        None,
+    )
+    if not lap_relation:
+        raise ValueError("アクティビティDBのラップDBリレーションが見つかりません")
 
+    lap_database_id = lap_relation["relation"]["database_id"]
+    lap_response = garmin_client.get_activity_laps(activity_id)
+    laps = lap_response.get("lapDTOs", [])
+
+    for index, lap in enumerate(laps, start=1):
+        lap_number = lap.get("lapIndex") or index
+        garmin_activity_id = str(activity_id)
+
+        existing = notion_client.databases.query(
+            database_id=lap_database_id,
+            filter={
+                "and": [
+                    {
+                        "property": "Garmin Activity ID",
+                        "rich_text": {"equals": garmin_activity_id},
+                    },
+                    {
+                        "property": "ラップ番号",
+                        "number": {"equals": lap_number},
+                    },
+                ]
+            },
+        )["results"]
+
+        def lap_number_value(*keys):
+            for key in keys:
+                value = lap.get(key)
+                if value is not None:
+                    return round(float(value), 1)
+            return None
+
+        duration = str(timedelta(seconds=int(lap.get("duration") or 0)))
+        speed = lap.get("averageSpeed") or 0
+        cadence = lap_number_value(
+            "averageRunCadence",
+            "averageBikeCadence",
+            "averageRunningCadenceInStepsPerMinute",
+        )
+
+        properties = {
+            "ラップ名": {
+                "title": [{"text": {"content": f"{lap_number} km"}}]
+            },
+            "Garmin Activity ID": {
+                "rich_text": [{"text": {"content": garmin_activity_id}}]
+            },
+            "アクティビティ": {
+                "relation": [{"id": activity_page_id}]
+            },
+            "アクティビティ名": {
+                "relation": [{"id": activity_page_id}]
+            },
+            "ラップ番号": {"number": lap_number},
+            "ラップ距離": {
+                "number": round(float(lap.get("distance") or 0) / 1000, 2)
+            },
+            "ラップタイム": {
+                "rich_text": [{"text": {"content": duration}}]
+            },
+            "ラップペース": {
+                "rich_text": [{
+                    "text": {"content": format_pace(speed)}
+                }]
+            },
+            "ラップ平均ケイデンス": {"number": cadence},
+            "ラップ平均パワー": {
+                "number": lap_number_value("averagePower")
+            },
+            "ラップ平均心拍": {
+                "number": lap_number_value("averageHR")
+            },
+            "ラップ標高差": {
+                "number": lap_number_value("elevationGain")
+            },
+            "日付": {
+                "date": {
+                    "start": (
+                        datetime.strptime(
+                            lap.get("startTimeGMT") or activity["startTimeGMT"],
+                            "%Y-%m-%d %H:%M:%S",
+                        )
+                        .replace(tzinfo=UTC)
+                        .isoformat()
+                    )
+                }
+            },
+        }
+
+        if existing:
+            notion_client.pages.update(
+                page_id=existing[0]["id"],
+                properties=properties,
+            )
+        else:
+            notion_client.pages.create(
+                parent={"database_id": lap_database_id},
+                properties=properties,
+            )
 def main():
     load_dotenv()
 
-    # Initialize Garmin and Notion clients using environment variables
     garmin_client, garmin_configuration = get_garmin_client()
     notion_client, notion_dbs = get_notion_client()
-
     database_id = notion_dbs.activities
 
-    # Get all activities
-    activities = get_all_activities(garmin_client, garmin_configuration.activity_fetch_limit)
+    activities = get_all_activities(
+        garmin_client,
+        garmin_configuration.activity_fetch_limit,
+    )
 
-    # Process all activities
     for activity in activities:
-        activity_date_raw: str = activity.get('startTimeGMT')
-        activity_date: datetime = (
-            datetime
-            .strptime(activity_date_raw, '%Y-%m-%d %H:%M:%S')  # Parse as format received from Garmin
-            .replace(tzinfo=UTC)  # Set timezone to UTC, as Garmin times are in GMT/UTC. Close enough.
+        activity_date_raw = activity.get("startTimeGMT")
+        activity_date = (
+            datetime.strptime(activity_date_raw, "%Y-%m-%d %H:%M:%S")
+            .replace(tzinfo=UTC)
         )
 
-        activity_name = format_entertainment(activity.get('activityName', 'Unnamed Activity'))
-        activity_type, activity_subtype = format_activity_type(
-            activity.get('activityType', {}).get('typeKey', 'Unknown'),
-            activity_name
+        activity_name = format_entertainment(
+            activity.get("activityName", "Unnamed Activity")
+        )
+        activity_type, _ = format_activity_type(
+            activity.get("activityType", {}).get("typeKey", "Unknown"),
+            activity_name,
         )
 
         if activity_type not in {"Running", "Trail Running", "Cycling", "Hiking"}:
             continue
 
-        # Check if activity already exists in Notion
-        existing_activity = activity_exists(notion_client, database_id, activity_date, activity_type, activity_name)
+        existing_activity = activity_exists(
+            notion_client,
+            database_id,
+            activity_date,
+            activity_type,
+            activity_name,
+        )
 
         if existing_activity:
             if activity_needs_update(existing_activity, activity):
                 update_activity(notion_client, existing_activity, activity)
-                # print(f"Updated: {activity_type} - {activity_name}")
+            activity_page_id = existing_activity["id"]
         else:
-            create_activity(notion_client, database_id, activity)
-            # print(f"Created: {activity_type} - {activity_name}")
+            activity_page_id = create_activity(
+                notion_client,
+                database_id,
+                activity,
+            )
+
+        sync_activity_laps(
+            garmin_client,
+            notion_client,
+            database_id,
+            activity_page_id,
+            activity,
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
