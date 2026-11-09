@@ -350,7 +350,7 @@ def sync_activity_laps(
         lap_start = datetime.fromisoformat(lap_start_raw.replace("Z", "+00:00"))
         if lap_start.tzinfo is None:
             lap_start = lap_start.replace(tzinfo=UTC)
-                properties = {
+        properties = {
             "ラップ名": {
                 "title": [{"text": {"content": f"{lap_number} km"}}]
             },
