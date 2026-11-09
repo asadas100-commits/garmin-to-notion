@@ -352,12 +352,7 @@ def sync_activity_laps(
             "Garmin Activity ID": {
                 "rich_text": [{"text": {"content": garmin_activity_id}}]
             },
-            "アクティビティ": {
-                "relation": [{"id": activity_page_id}]
-            },
-            "アクティビティ名": {
-                "relation": [{"id": activity_page_id}]
-            },
+            "Activity Name": {"relation": [{"id": activity_page_id}]},
             "ラップ番号": {"number": lap_number},
             "ラップ距離": {
                 "number": round(float(lap.get("distance") or 0) / 1000, 2)
