@@ -346,7 +346,10 @@ def sync_activity_laps(
             "averageBikeCadence",
             "averageRunningCadenceInStepsPerMinute",
         )
-
+        lap_start_raw = lap.get("startTimeGMT") or activity["startTimeGMT"]
+        lap_start = datetime.fromisoformat(lap_start_raw.replace("Z", "+00:00"))
+        if lap_start.tzinfo is None:
+            lap_start = lap_start.replace(tzinfo=UTC)
         properties = {
             "ラップ名": {
                 "title": [{"text": {"content": f"{lap_number} km"}}]
@@ -377,19 +380,7 @@ def sync_activity_laps(
             "ラップ標高差": {
                 "number": lap_number_value("elevationGain")
             },
-            "日付": {
-                "date": {
-                    "start": (
-                        datetime.strptime(
-                            lap.get("startTimeGMT") or activity["startTimeGMT"],
-                            "%Y-%m-%d %H:%M:%S",
-                        )
-                        .replace(tzinfo=UTC)
-                        .isoformat()
-                    )
-                }
-            },
-        }
+            "日付": {"date": {"start": lap_start.isoformat()}},
 
         if existing:
             notion_client.pages.update(
