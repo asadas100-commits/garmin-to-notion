@@ -357,7 +357,10 @@ def sync_activity_laps(
             "Garmin Activity ID": {
                 "rich_text": [{"text": {"content": garmin_activity_id}}]
             },
-            "Activity Name": {
+            "アクティビティ": {
+                "relation": [{"id": activity_page_id}]
+            },
+            "アクティビティ名": {
                 "relation": [{"id": activity_page_id}]
             },
             "ラップ番号": {"number": lap_number},
