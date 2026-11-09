@@ -350,14 +350,16 @@ def sync_activity_laps(
         lap_start = datetime.fromisoformat(lap_start_raw.replace("Z", "+00:00"))
         if lap_start.tzinfo is None:
             lap_start = lap_start.replace(tzinfo=UTC)
-        properties = {
+                properties = {
             "ラップ名": {
                 "title": [{"text": {"content": f"{lap_number} km"}}]
             },
             "Garmin Activity ID": {
                 "rich_text": [{"text": {"content": garmin_activity_id}}]
             },
-            "Activity Name": {"relation": [{"id": activity_page_id}]},
+            "Activity Name": {
+                "relation": [{"id": activity_page_id}]
+            },
             "ラップ番号": {"number": lap_number},
             "ラップ距離": {
                 "number": round(float(lap.get("distance") or 0) / 1000, 2)
@@ -380,7 +382,10 @@ def sync_activity_laps(
             "ラップ標高差": {
                 "number": lap_number_value("elevationGain")
             },
-            "日付": {"date": {"start": lap_start.isoformat()}},
+            "日付": {
+                "date": {"start": lap_start.isoformat()}
+            },
+        },
 
         if existing:
             notion_client.pages.update(
