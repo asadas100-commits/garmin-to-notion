@@ -307,7 +307,9 @@ def sync_activity_laps(
         raise ValueError("アクティビティDBのラップDBリレーションが見つかりません")
 
     lap_database_id = lap_relation["relation"]["database_id"]
-    lap_response = garmin_client.get_activity_laps(activity_id)
+    lap_response = garmin_client.connectapi(
+    f"/activity-service/activity/{activity_id}/laps"
+)
     laps = lap_response.get("lapDTOs", [])
 
     for index, lap in enumerate(laps, start=1):
