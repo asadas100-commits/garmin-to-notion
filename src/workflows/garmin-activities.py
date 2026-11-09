@@ -308,8 +308,8 @@ def sync_activity_laps(
 
     lap_database_id = lap_relation["relation"]["database_id"]
     lap_response = garmin_client.connectapi(
-    f"/activity-service/activity/{activity_id}/laps"
-)
+        f"/activity-service/activity/{activity_id}/laps"
+    )
     laps = lap_response.get("lapDTOs", [])
 
     for index, lap in enumerate(laps, start=1):
@@ -385,7 +385,7 @@ def sync_activity_laps(
             "日付": {
                 "date": {"start": lap_start.isoformat()}
             },
-        },
+        }
 
         if existing:
             notion_client.pages.update(
