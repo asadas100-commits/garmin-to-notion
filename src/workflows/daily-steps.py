@@ -1,3 +1,6 @@
+import time
+from notion_client.errors import APIResponseError
+
 from datetime import date, timedelta
 
 from dotenv import load_dotenv
@@ -36,17 +39,21 @@ def daily_steps_exist(client, database_id, activity_date):
 
 
 def steps_need_update(existing_steps, new_steps):
-    """
-    Compare existing steps data with imported data to determine if an update is needed.
-    """
-    existing_props = existing_steps['properties']
-    activity_type = "Walking"
+    existing_props = existing_steps["properties"]
+
+    existing_title = existing_props["Activity Type"]["title"]
+    existing_activity_type = "".join(
+        item.get("plain_text", "") for item in existing_title
+    )
+
+    total_distance = new_steps.get("totalDistance") or 0
+    new_distance_km = round(total_distance / 1000, 2)
 
     return (
-        existing_props['Total Steps']['number'] != new_steps.get('totalSteps') or
-        existing_props['Step Goal']['number'] != new_steps.get('stepGoal') or
-        existing_props['Total Distance (km)']['number'] != new_steps.get('totalDistance') or
-        existing_props['Activity Type']['title'] != activity_type
+        existing_props["Total Steps"]["number"] != new_steps.get("totalSteps")
+        or existing_props["Step Goal"]["number"] != new_steps.get("stepGoal")
+        or existing_props["Total Distance (km)"]["number"] != new_distance_km
+        or existing_activity_type != "Walking"
     )
 
 
@@ -91,9 +98,17 @@ def create_daily_steps(client, database_id, steps):
         "parent": {"database_id": database_id},
         "properties": properties,
     }
+    for attempt in range(6):
+        try:
+            client.pages.create(**page)
+            return
+        except APIResponseError as error:
+            if error.code != "rate_limited" or attempt == 5:
+                raise
 
-    client.pages.create(**page)
-
+            wait_seconds = 2 ** (attempt + 1)
+            print(f"Notionの制限中です。{wait_seconds}秒待って再試行します。")
+            time.sleep(wait_seconds)
 
 def main():
     load_dotenv()
