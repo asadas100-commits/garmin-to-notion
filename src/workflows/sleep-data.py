@@ -1,3 +1,5 @@
+import time
+from notion_client.errors import APIResponseError
 from datetime import datetime
 
 import pytz
@@ -42,12 +44,25 @@ def format_date_for_name(sleep_date):
 
 
 def sleep_data_exists(client, database_id, sleep_date):
-    query = client.databases.query(
-        database_id=database_id,
-        filter={"property": "Long Date", "date": {"equals": sleep_date}}
-    )
-    results = query.get('results', [])
-    return results[0] if results else None  # Ensure it returns None instead of causing IndexError
+    for attempt in range(6):
+        try:
+            query = client.databases.query(
+                database_id=database_id,
+                filter={
+                    "property": "Long Date",
+                    "date": {"equals": sleep_date},
+                },
+            )
+            results = query.get("results", [])
+            return results[0] if results else None
+
+        except APIResponseError as error:
+            if error.code != "rate_limited" or attempt == 5:
+                raise
+
+            wait_seconds = min(2 ** (attempt + 1), 60)
+            print(f"Notionの制限中です。{wait_seconds}秒待って再試行します。")
+            time.sleep(wait_seconds)
 
 
 def create_sleep_data(client, database_id, sleep_data, skip_zero_sleep=True):
