@@ -5,9 +5,9 @@ on:
     - cron: '0 1 * * *' # Daily
   workflow_dispatch:
     inputs:
-  　　　GARMIN_ACTIVITIES_FETCH_LIMIT:
-      　　type: string
-      　　default: '10'
+      GARMIN_ACTIVITIES_FETCH_LIMIT:
+        type: string
+        default: '10'
 env:
   TZ: 'America/Toronto'
 
