@@ -21,6 +21,17 @@ def main():
         print("体組成データは見つかりませんでした。")
         return
 
+    fields = {
+        "体重 (kg)": "weight",
+        "BMI": "bmi",
+        "体脂肪率 (%)": "bodyFat",
+        "骨格筋量 (kg)": "muscleMass",
+        "骨量 (kg)": "boneMass",
+        "体水分率 (%)": "bodyWater",
+    }
+
+    saved_count = 0
+
     for record in records:
         record_date = record.get("calendarDate") or record.get("date")
         if not record_date:
@@ -34,26 +45,38 @@ def main():
             "測定機器": {"select": {"name": "Garmin Index S2"}},
         }
 
-        fields = {
-            "体重 (kg)": "weight",
-            "BMI": "bmi",
-            "体脂肪率 (%)": "bodyFat",
-            "骨格筋量 (kg)": "muscleMass",
-            "骨量 (kg)": "boneMass",
-            "体水分率 (%)": "bodyWater",
-        }
-
         for notion_name, garmin_name in fields.items():
             value = record.get(garmin_name)
-            if value is not None:
-                properties[notion_name] = {"number": value}
+            if value is None:
+                continue
 
-        notion.pages.create(
-            parent={"database_id": databases.body_composition},
-            properties=properties,
+            if notion_name in ("体重 (kg)", "骨格筋量 (kg)", "骨量 (kg)"):
+                value = value / 1000
+
+            properties[notion_name] = {"number": round(value, 3)}
+
+        result = notion.databases.query(
+            database_id=databases.body_composition,
+            filter={
+                "property": "Date",
+                "date": {"equals": record_date},
+            },
         )
 
-    print(f"{len(records)}件の体組成データをNotionに登録しました。")
+        if result["results"]:
+            notion.pages.update(
+                page_id=result["results"][0]["id"],
+                properties=properties,
+            )
+        else:
+            notion.pages.create(
+                parent={"database_id": databases.body_composition},
+                properties=properties,
+            )
+
+        saved_count += 1
+
+    print(f"{saved_count}件の体組成データをNotionに登録・更新しました。")
 
 
 if __name__ == "__main__":
