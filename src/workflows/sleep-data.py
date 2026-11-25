@@ -8,8 +8,7 @@ from dotenv import load_dotenv, dotenv_values
 from src.helpers import get_garmin_client, get_notion_client
 
 # Constants
-local_tz = pytz.timezone("America/Toronto")
-
+local_tz = pytz.timezone("Asia/Tokyo")
 # Load environment variables
 load_dotenv()
 CONFIG = dotenv_values()
